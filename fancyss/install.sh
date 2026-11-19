@@ -1465,33 +1465,79 @@ check_empty_node(){
 	fi
 }
 
-check_device(){
-	if [ ! -d "/data" ];then
-		return "1"
-	fi
-	
-	mkdir -p $1/rw_test 2>/dev/null
-	sync
-	if [ -d "$1/rw_test" ]; then
-		echo "rwTest=OK" >"$1/rw_test/rw_test.txt"
-		sync
-		if [ -f "$1/rw_test/rw_test.txt" ]; then
-			. "$1/rw_test/rw_test.txt"
-			if [ "$rwTest" = "OK" ]; then
-				rm -rf "$1/rw_test"
-				return "0"
-			else
-				#echo_date "发生错误！你选择的磁盘目录：${1}没有通过文件读取测试！"
-				return "1"
-			fi
-		else
-			#echo_date "发生错误！你选择的磁盘目录：${1}没有通过文件写入测试！"
-			return "1"
+install_mount_free_kib(){
+	local usage=""
+	usage=$(df -k "$1" 2>/dev/null) || return 1
+	printf '%s\n' "${usage}" | awk -v path="$1" 'NF >= 5 && $NF == path && $(NF - 2) ~ /^[0-9]+$/ {print $(NF - 2); exit}'
+}
+
+install_size_kib(){
+	local usage=""
+	usage=$(du -sk "$1" 2>/dev/null) || return 1
+	printf '%s\n' "${usage}" | awk '$1 ~ /^[0-9]+$/ {print $1; exit}'
+}
+
+stage_data_binaries(){
+	local staging="" available="" size="" bin="" incoming=""
+	[ -d /data ] || return 0
+
+	# 先预留实际空间，只处理安装包中的新文件。
+	for bin in xray v2ray hysteria2 naive anytls-zig sslocal rss-local rss-tunnel rss-redir; do
+		incoming="${DIR}/bin/${bin}"
+		[ -f "${incoming}" ] || continue
+		available=$(install_mount_free_kib /data)
+		[ -n "${available}" ] || break
+		size=$(install_size_kib "${incoming}")
+		[ -n "${size}" ] && [ "${size}" -lt "$((available - 256))" ] || continue
+		if [ -z "${staging}" ]; then
+			staging=$(mktemp -d /data/.fancyss-install.XXXXXX 2>/dev/null) || break
 		fi
-	else
-		#echo_date "发生错误！你选择的磁盘目录：${1}没有通过文件夹写入测试！"
-		return "1"
+		if ! { cp -p "${incoming}" "${staging}/${bin}" && chmod +x "${staging}/${bin}" && rm -f "${incoming}"; }; then
+			rm -f "${staging}/${bin}"
+		fi
+	done
+	printf '%s\n' "${staging}"
+}
+
+check_jffs_install_space(){
+	local available="" fs_type="" need="" basis="候选文件夹占用" margin=""
+	local archive="" packed_size=""
+	echo_date "检测JFFS分区剩余空间..."
+	need=$(install_size_kib "${DIR}")
+	if [ -z "${need}" ]; then
+		echo_date "无法确认安装所需空间，退出安装。"
+		return 1
 	fi
+	fs_type=$(mount | awk '$3 == "/jffs" {print $5; exit}')
+	case "${fs_type}" in
+		jffs2|ubifs)
+			if archive=$(mktemp /tmp/fancyss-install-size.XXXXXX); then
+				if tar -czf "${archive}" -C "${DIR}" .; then
+					packed_size=$(install_size_kib "${archive}")
+				fi
+				rm -f "${archive}"
+			fi
+			if [ -n "${packed_size}" ] && [ "${packed_size}" -gt 0 ]; then
+				need=${packed_size}
+				basis="候选包大小"
+			fi
+			;;
+	esac
+	margin=$((need / 10))
+	[ "${margin}" -ge 2048 ] || margin=2048
+	need=$((need + margin))
+	available=$(install_mount_free_kib /jffs)
+	if [ -z "${available}" ]; then
+		echo_date "无法确认JFFS剩余空间，退出安装。"
+		return 1
+	fi
+	echo_date "当前JFFS分区(${fs_type:-unknown})剩余${available}KB"
+	echo_date "插件安装预计需要约${need}KB（${basis}+动态余量${margin}KB）"
+	if [ "${available}" -le "${need}" ]; then
+		echo_date "JFFS空间不足，退出安装。"
+		return 1
+	fi
+	echo_date "JFFS空间满足，继续安装！"
 }
 
 cleanup_jffs_install_tmp(){
@@ -1559,7 +1605,24 @@ install_now(){
 	local TITLE_NEW="科学上网 ${PKG_TYPE}"
 	local DESCR="科学上网 ${PKG_TYPE} for AsusWRT/Merlin platform"
 	echo_date "安装版本：${PKG_NAME}_${PKG_ARCH}_${PKG_TYPE}_${PLVER}"
-	
+
+	# 在改动旧插件前裁剪候选安装包并检查空间。
+	local system_curl="" data_stage="" staged_bin="" bin_name=""
+	if curl -V | grep -q proxy; then
+		system_curl=$(command -v curl)
+		rm -f "${DIR}/bin/curl-fancyss"
+	fi
+	[ ! -f /usr/bin/jq ] || rm -f "${DIR}/bin/jq"
+	if command -v socat >/dev/null 2>&1; then
+		rm -f "${DIR}/bin/uredir"
+	fi
+	data_stage=$(stage_data_binaries)
+	if ! check_jffs_install_space; then
+		[ -z "${data_stage}" ] || rm -rf "${data_stage}"
+		cleanup_install_tmp
+		exit 1
+	fi
+
 	# stop first
 	local ENABLE=$(dbus get ss_basic_enable)
 	if [ "${ENABLE}" == "1" -a -f "/koolshare/ss/ssconfig.sh" ];then
@@ -1722,95 +1785,28 @@ install_now(){
 	echo 1 > /proc/sys/vm/drop_caches
 	sync
 
-	# package modify
-
-	# curl-fancyss is not needed when curl in system support proxy (102 official mod and merlin mod have proxy enabled)
-	local CURL_PROXY_FLAG=$(curl -V|grep -Eo proxy)
-	if [ -n "${CURL_PROXY_FLAG}" ];then
-		rm -rf /tmp/shadowsocks/bin/curl-fancyss
-		ln -sf $(which curl) /koolshare/bin/curl-fancyss
+	# 固件自带支持代理的 curl 或 jq 时，使用系统二进制。
+	if [ -n "${system_curl}" ]; then
+		ln -sf "${system_curl}" /koolshare/bin/curl-fancyss
 	fi
-
-	# jq is included in official 102 stock firmware higher version(RT-BE86U)
-	if [ -f /usr/bin/jq ];then
-		rm -rf /tmp/shadowsocks/bin/jq
-		if [ ! -L /koolshare/bin/jq ];then
-			ln -sf /usr/bin/jq /koolshare/bin/jq
-		fi
-	fi
-	
-	# some file in package no need to install
-	if [ -n "$(which socat)" ];then
-		rm -rf /tmp/shadowsocks/bin/uredir
+	if [ -f /usr/bin/jq ] && [ ! -L /koolshare/bin/jq ]; then
+		ln -sf /usr/bin/jq /koolshare/bin/jq
 	fi
 
 	prepare_websocketd_package
 
-	# 将一些较大的二进制文件安装到/data分区，以节约jffs分区空间
-	# 1. 卸载的时候记得删除/data分区内的二进制
-	# 2. 打包的时候应该用/data分区内的二进制
-	# 3. 更新二进制的时候应该检测/koolshare/bin下的是否为软连接，是的话应该更新真实位置的二进制
-	check_device "/data"
-	if [ "$?" == "0" ];then
-		# 检测data分区剩余空间
-		echo_date "检测/data分区剩余空间..."
-		local SPACE_DATA_AVAL1=$(df | grep -w "/data" | awk '{print $4}')
-		echo_date "/data分区剩余空间为：${SPACE_DATA_AVAL1}KB"
-		local _BINS="xray v2ray hysteria2 naive anytls-zig sslocal rss-local rss-tunnel rss-redir"
-		for _BIN in ${_BINS}
-		do
-			if [ -f "/tmp/shadowsocks/bin/${_BIN}" ];then
-				local SPACE_DATA_AVAL1=$(df | grep -w "/data" | awk '{print $4}')
-				local SPACE_DATA_AVAL2=$((${SPACE_DATA_AVAL1} - 256))
-				local BIN_SIZE=$(du /tmp/shadowsocks/bin/${_BIN} | awk '{print $1}')
-				if [ "${BIN_SIZE}" -lt "${SPACE_DATA_AVAL2}" ];then
-					echo_date "将${_BIN}安装到/data分区..."
-					mv /tmp/shadowsocks/bin/${_BIN} /data/
-					chmod +x /data/${_BIN} 
-					ln -sf /data/${_BIN} /koolshare/bin/${_BIN}
-				fi
-				sync
+	if [ -n "${data_stage}" ]; then
+		for staged_bin in "${data_stage}"/*; do
+			[ -f "${staged_bin}" ] || continue
+			bin_name=${staged_bin##*/}
+			echo_date "将${bin_name}安装到/data分区..."
+			if ! mv -f "${staged_bin}" "/data/${bin_name}" || ! ln -sf "/data/${bin_name}" "/koolshare/bin/${bin_name}"; then
+				echo_date "安装${bin_name}到/data失败，退出安装。"
+				rm -rf "${data_stage}"
+				exit_install 1
 			fi
 		done
-	fi
-
-	# 检测jffs储存空间是否足够
-	echo_date "检测jffs分区剩余空间..."
-
-	SPACE_AVAL=$(df | grep -w "/jffs" | awk '{print $4}')
-	JFFS_FS_TYPE=$(mount | awk '$3 == "/jffs" {print $5; exit}')
-	SPACE_TREE_NEED=$(du -s /tmp/shadowsocks 2>/dev/null | awk '{print $1}')
-	cd /tmp
-	tar -cz -f /tmp/test_size.tar.gz shadowsocks/
-	if [ -f "/tmp/test_size.tar.gz" ];then
-		SPACE_PACK_NEED=$(du -s /tmp/test_size.tar.gz | awk '{print $1}')
-		rm -rf /tmp/test_size.tar.gz
-	else
-		SPACE_PACK_NEED=""
-	fi
-	[ -n "${SPACE_TREE_NEED}" ] || SPACE_TREE_NEED=0
-	[ -n "${SPACE_PACK_NEED}" ] || SPACE_PACK_NEED=${SPACE_TREE_NEED}
-	case "${JFFS_FS_TYPE}" in
-		ext2|ext3|ext4)
-			SPACE_NEED=${SPACE_TREE_NEED}
-			SPACE_BASIS="候选文件夹占用"
-			;;
-		*)
-			SPACE_NEED=${SPACE_PACK_NEED}
-			SPACE_BASIS="候选包大小"
-			;;
-	esac
-	SPACE_MARGIN=$((SPACE_NEED / 10))
-	[ "${SPACE_MARGIN}" -lt "2048" ] && SPACE_MARGIN=2048
-	SPACE_NEED=$((SPACE_NEED + SPACE_MARGIN))
-	[ -n "${JFFS_FS_TYPE}" ] || JFFS_FS_TYPE="unknown"
-	echo_date "当前jffs分区(${JFFS_FS_TYPE})剩余${SPACE_AVAL}KB"
-	echo_date "插件安装预计需要约${SPACE_NEED}KB（${SPACE_BASIS}+动态余量${SPACE_MARGIN}KB）"
-	if [ "${SPACE_AVAL}" -gt "${SPACE_NEED}" ];then
-		echo_date "空间满足，继续安装！"
-	else
-		echo_date "空间不足，退出安装！"
-		exit_install 1
+		rmdir "${data_stage}"
 	fi
 
 	# isntall file
