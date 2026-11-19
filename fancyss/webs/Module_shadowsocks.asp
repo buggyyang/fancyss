@@ -13793,10 +13793,10 @@ function version_show() {
 		type: 'GET',
 		dataType: 'json',
 		success: function(res) {
-			if (typeof(res["version"]) != "undefined" && res["version"].length > 0) {
-				if (versionCompare(res["version"], db_ss["ss_basic_version_local"])) {
-					$("#updateBtn").html("<i>升级到：" + res.version + "</i>");
-				}
+			var onlineVersion = res["version_" + PKG_ARCH + "_" + PKG_TYPE];
+			if (onlineVersion == null) onlineVersion = res.version;
+			if (typeof onlineVersion === "string" && /^[0-9]+(\.[0-9]+)+$/.test(onlineVersion) && versionCompare(onlineVersion, db_ss["ss_basic_version_local"])) {
+				$("#updateBtn").html("<i>升级到：" + onlineVersion + "</i>");
 			}
 		}
 	});
