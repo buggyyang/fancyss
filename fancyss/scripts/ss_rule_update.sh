@@ -165,16 +165,23 @@ start_update(){
 		fi
 
 		echo_date "--------------------------------------------------------------------"
-		if [ "${local_date_cmp}" = "${online_date_cmp}" ] && [ "${force_update}" != "1" ]; then
-			echo_date "检测到${key}本地版本号和在线版本号相同，不进行更新!"
-			return 0
+		dst_file="${rule_save_dir}/${online_name}"
+		if [ "${force_update}" != "1" ]; then
+			if [ "${local_date_cmp}" = "${online_date_cmp}" ]; then
+				echo_date "检测到${key}本地版本号和在线版本号相同，不进行更新!"
+				return 0
+			fi
+			if [ "${online_date_cmp}" \< "${local_date_cmp}" ] && [ -s "${dst_file}" ] &&
+				[ "$(md5sum "${dst_file}" | awk '{print $1}')" = "${local_md5}" ]; then
+				echo_date "本地${key}规则比在线版本新，保留本地规则。"
+				return 0
+			fi
 		fi
 
 		echo_date "检测到新版本${key}，开始更新..."
 		echo_date "下载${online_name}到临时文件..."
 
 		tmp_file="${rule_down_dir}/${online_name}"
-		dst_file="${rule_save_dir}/${online_name}"
 		rm -rf "${tmp_file}"
 
 		wget -4 --no-check-certificate --timeout=8 -qO - "${URL_MAIN}/${online_name}" > "${tmp_file}"

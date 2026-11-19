@@ -1,30 +1,30 @@
 {
   "gfwlist": {
     "name": "gfwlist.gz",
-    "date": "2026-04-29 10:52",
-    "md5": "783507d5ed19d233574a0d8d47fed788",
-    "count": "6451"
+    "date": "2026-11-19 08:09",
+    "md5": "c65a19a59d2de259cacba898d0697409",
+    "count": "6693"
   },
   "chnlist": {
     "name": "chnlist.gz",
-    "date": "2026-04-29 10:52",
-    "md5": "5f61abb2fb23d8600ad24cd691882596",
-    "count": "116421",
+    "date": "2026-11-19 08:09",
+    "md5": "6497f60b8105a2623039be314b3f93b2",
+    "count": "109782",
     "note": "merged from dnsmasq-china-list"
   },
   "chnroute": {
     "name": "chnroute.txt",
-    "date": "2026-04-29 10:52",
-    "md5": "ead568c98220d39173bb4f84c585e99b",
-    "count": "8291",
-    "count_ip": "358747708",
+    "date": "2026-11-19 08:09",
+    "md5": "07a50cb7b55282365b88213b2edd9478",
+    "count": "6917",
+    "count_ip": "357092792",
     "source": "merged"
   },
   "chnroute6": {
     "name": "chnroute6.txt",
-    "date": "2026-04-29 10:52",
-    "md5": "3e03483582f72d0f7d66d84e1d29914f",
-    "count": "2041",
+    "date": "2026-11-19 08:09",
+    "md5": "8260fb9aa9989e265eecd68b86b63437",
+    "count": "2048",
     "source": "apnic"
   },
   "adslist": {
@@ -67,15 +67,15 @@
   },
   "apple_china": {
     "name": "apple_china.txt",
-    "date": "2026-01-05 22:45",
-    "md5": "616b568666535fe67c8ca9b830fcaa24",
-    "count": "167"
+    "date": "2026-11-19 08:09",
+    "md5": "4e4295f1172fca522bb78901aff78264",
+    "count": "165"
   },
   "google_china": {
     "name": "google_china.txt",
-    "date": "2026-01-05 22:45",
-    "md5": "2003b325844ddc1c5b4702c07c6864c0",
-    "count": "143"
+    "date": "2026-11-19 08:09",
+    "md5": "9910b5e06dfcdb5a9be57e131dcc35d9",
+    "count": "112"
   },
   "cdn_test": {
     "name": "cdn_test.txt",

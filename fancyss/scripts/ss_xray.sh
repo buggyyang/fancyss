@@ -43,46 +43,47 @@ fi
 
 get_latest_version(){
 	local VERSION_FILE=$1
-	rm -rf /tmp/xray_latest_info.txt
+	local version_ref
+	local current_version
 	echo_date "检测Xray最新版本..."
-	curl --connect-timeout 8 -s ${url_main}/${VERSION_FILE}.txt > /tmp/xray_latest_info.txt
-	if [ "$?" == "0" ];then
-		if [ -z "$(cat /tmp/xray_latest_info.txt)" ];then
-			echo_date "获取Xray最新版本信息失败！使用备用服务器检测！"
-			failed_warning_xray
-		fi
-		if [ -n "$(cat /tmp/xray_latest_info.txt|grep 404)" ];then
-			echo_date "获取Xray最新版本信息失败！使用备用服务器检测！"
-			failed_warning_xray
-		fi
-		XVERSION=$(cat /tmp/xray_latest_info.txt | sed 's/v//g')
-		[ -z "${XVERSION}" ] && XVERSION="0"
-		
-		echo_date "检测到Xray最新版本：${XVERSION}"
-		if [ ! -f "${_TARGET_FILE}" ];then
-			echo_date "xray安装文件丢失！重新下载！"
-			CUR_VER="0"
-		else
-			CUR_VER=$(run xray -version 2>/dev/null | head -n 1 | cut -d " " -f2 | sed 's/v//g')
-			[ -z "${CUR_VER}" ] && CUR_VER="0"
-			echo_date "当前已安装Xray版本：${CUR_VER}"
-		fi
-		COMP=$(versioncmp ${CUR_VER} ${XVERSION})
-		if [ "${COMP}" == "1" ];then
-			[ "${CUR_VER}" != "0" ] && echo_date "Xray已安装版本号低于更新版本，开始更新程序..."
-			update_now v${XVERSION}
-		elif [ "${COMP}" == "-1" ];then
-			[ "${CUR_VER}" != "0" ] && echo_date "Xray已安装版本号高于更新版本，开始降级程序..."
-			update_now v${XVERSION}
-		else
-			XRAY_LOCAL_VER=$(${_TARGET_FILE} version 2>/dev/null | head -n 1 | cut -d " " -f2)
-			[ -n "${XRAY_LOCAL_VER}" ] && dbus set ss_basic_xray_version="${XRAY_LOCAL_VER}"
-			echo_date "Xray已安装版本号等于更新版本，退出更新程序!"
-		fi
-	else
-		echo_date "获取Xray最新版本信息失败！使用备用服务器检测！"
+	version_ref=$(curl --connect-timeout 8 -fsS "${url_main}/${VERSION_FILE}.txt") || failed_warning_xray
+	case "${version_ref}" in
+		*[!a-zA-Z0-9.-]*) failed_warning_xray ;;
+	esac
+	if ! printf '%s\n' "${version_ref}" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.-]+)?$'; then
 		failed_warning_xray
 	fi
+	local online_version=${version_ref#v}
+	echo_date "检测到Xray最新版本：${online_version}"
+	if [ ! -s "${_TARGET_FILE}" ] || [ ! -x "${_TARGET_FILE}" ]; then
+		echo_date "Xray安装文件丢失或不可执行，重新下载。"
+		update_now "${version_ref}"
+		return
+	fi
+	current_version=$(run /koolshare/bin/xray version 2>/dev/null | head -n 1 | cut -d " " -f2)
+	current_version=${current_version#v}
+	if [ -z "${current_version}" ]; then
+		echo_date "无法读取当前Xray版本，请检查内核能否运行。"
+		return 1
+	fi
+	dbus set ss_basic_xray_version="${current_version}"
+	echo_date "当前已安装Xray版本：${current_version}"
+	case $(versioncmp "${current_version%%-*}" "${online_version%%-*}") in
+		1)
+			echo_date "Xray已安装版本号低于更新版本，开始更新程序..."
+			update_now "${version_ref}"
+			;;
+		-1)
+			echo_date "当前Xray版本高于在线版本，保留当前版本。"
+			;;
+		0)
+			echo_date "Xray已安装版本号等于更新版本，退出更新程序！"
+			;;
+		*)
+			echo_date "无法比较Xray版本。"
+			return 1
+			;;
+	esac
 }
 
 failed_warning_xray(){

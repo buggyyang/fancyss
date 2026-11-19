@@ -1,5 +1,5 @@
 {
-  "generated_at": 1780328843,
+  "generated_at": 1795047119,
   "source": "geotool",
   "site": {
     "ai": {
@@ -9,7 +9,7 @@
       "total": 1584
     },
     "apple-cn": {
-      "total": 164
+      "total": 162
     },
     "appletv": {
       "total": 8
@@ -24,7 +24,7 @@
       "total": 74
     },
     "cn": {
-      "total": 118209
+      "total": 109767
     },
     "connectivity-check": {
       "total": 14
@@ -42,7 +42,7 @@
       "total": 826
     },
     "gfw": {
-      "total": 6351
+      "total": 6598
     },
     "github": {
       "total": 31
@@ -51,7 +51,7 @@
       "total": 853
     },
     "google-cn": {
-      "total": 143
+      "total": 112
     },
     "max": {
       "total": 87
@@ -109,9 +109,9 @@
       "ipv6": 235
     },
     "cn": {
-      "total": 10300,
-      "ipv4": 8286,
-      "ipv6": 2014
+      "total": 8937,
+      "ipv4": 6917,
+      "ipv6": 2020
     },
     "discord": {
       "total": 11,
@@ -398,18 +398,18 @@
         "google-cn"
       ],
       "ip_assets": [],
-      "site_count": 143,
+      "site_count": 112,
       "ip_count": 0,
-      "total": 143
+      "total": 112
     },
     "apple-cn": {
       "site_assets": [
         "apple-cn"
       ],
       "ip_assets": [],
-      "site_count": 164,
+      "site_count": 162,
       "ip_count": 0,
-      "total": 164
+      "total": 162
     },
     "chnlist": {
       "site_assets": [
@@ -419,9 +419,9 @@
         "cn",
         "private"
       ],
-      "site_count": 118209,
-      "ip_count": 10318,
-      "total": 128527
+      "site_count": 109767,
+      "ip_count": 8955,
+      "total": 118722
     },
     "proxy": {
       "site_assets": [
@@ -437,9 +437,9 @@
         "gfw"
       ],
       "ip_assets": [],
-      "site_count": 6351,
+      "site_count": 6598,
       "ip_count": 0,
-      "total": 6351
+      "total": 6598
     }
   }
 }

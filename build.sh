@@ -84,11 +84,15 @@ sync_binary(){
 		fi
 
 		local version=$(cat ${CURR_PATH}/binaries/${BIN}/${VERSION_FLAG})
+		local hnd_version="${version}"
+		if [ "${BIN}" = "xray" ]; then
+			hnd_version=$(cat "${CURR_PATH}/binaries/xray/latest_hnd.txt") || return 1
+		fi
 		echo ">>> start to copy latest ${BIN}, version: ${version}"
 		cp -rf ${CURR_PATH}/binaries/${BIN}/${version}/${BIN}_arm64 ${CURR_PATH}/fancyss/bin-mtk/${BIN}
 		cp -rf ${CURR_PATH}/binaries/${BIN}/${version}/${BIN}_arm64 ${CURR_PATH}/fancyss/bin-hnd_v8/${BIN}
 		cp -rf ${CURR_PATH}/binaries/${BIN}/${version}/${BIN}_armv7 ${CURR_PATH}/fancyss/bin-ipq32/${BIN}
-		cp -rf ${CURR_PATH}/binaries/${BIN}/${version}/${BIN}_armv7 ${CURR_PATH}/fancyss/bin-hnd/${BIN}
+		cp -rf "${CURR_PATH}/binaries/${BIN}/${hnd_version}/${BIN}_armv7" "${CURR_PATH}/fancyss/bin-hnd/${BIN}" || return 1
 		cp -rf ${CURR_PATH}/binaries/${BIN}/${version}/${BIN}_armv7 ${CURR_PATH}/fancyss/bin-qca/${BIN}
 		cp -rf ${CURR_PATH}/binaries/${BIN}/${version}/${BIN}_armv5 ${CURR_PATH}/fancyss/bin-arm/${BIN}
 	done
@@ -103,11 +107,13 @@ sync_binary(){
 	cp -rf ${CURR_PATH}/binaries/tuic-client/${TUIC_VERSION}/tuic-client_armv7 ${CURR_PATH}/fancyss/bin-arm/tuic-client
 
 	local upx=".upx"
+	local chinadns_hnd_version
+	chinadns_hnd_version=$(cat "${CURR_PATH}/binaries/chinadns-ng/latest_hnd.txt") || return 1
 	
 	cp -rf ${CURR_PATH}/binaries/chinadns-ng/chinadns-ng+wolfssl@aarch64-linux-musl@generic+v8a@fast+lto$upx ${CURR_PATH}/fancyss/bin-mtk/chinadns-ng
 	cp -rf ${CURR_PATH}/binaries/chinadns-ng/chinadns-ng+wolfssl@aarch64-linux-musl@generic+v8a@fast+lto$upx ${CURR_PATH}/fancyss/bin-hnd_v8/chinadns-ng
 	cp -rf ${CURR_PATH}/binaries/chinadns-ng/chinadns-ng+wolfssl@arm-linux-musleabi@generic+v7a@fast+lto$upx ${CURR_PATH}/fancyss/bin-ipq32/chinadns-ng
-	cp -rf ${CURR_PATH}/binaries/chinadns-ng/chinadns-ng+wolfssl@arm-linux-musleabi@generic+v7a@fast+lto$upx ${CURR_PATH}/fancyss/bin-hnd/chinadns-ng
+	cp -f "${CURR_PATH}/binaries/chinadns-ng/${chinadns_hnd_version}/chinadns-ng_armv7.upx" "${CURR_PATH}/fancyss/bin-hnd/chinadns-ng" || return 1
 	cp -rf ${CURR_PATH}/binaries/chinadns-ng/chinadns-ng+wolfssl@arm-linux-musleabi@generic+v7a@fast+lto$upx ${CURR_PATH}/fancyss/bin-qca/chinadns-ng
 	cp -rf ${CURR_PATH}/binaries/chinadns-ng/chinadns-ng+wolfssl@arm-linux-musleabi@generic+v5te+soft_float@fast+lto$upx ${CURR_PATH}/fancyss/bin-arm/chinadns-ng
 
@@ -577,12 +583,12 @@ do_backup(){
 }
 
 papare(){
-	rm -f ${CURR_PATH}/packages/*
 	cp_rules
 	prepare_geodata_assets
 	cp_rules_ng2
-	sync_binary
+	sync_binary || exit 1
 	verify_zig_tool_binaries || exit 1
+	rm -f ${CURR_PATH}/packages/*
 	cat >${CURR_PATH}/packages/version_tmp.json.js <<-EOF
 	{
 	"name":"fancyss"
@@ -613,7 +619,6 @@ make(){
 	pack hnd lite release
 	pack hnd_v8 full release
 	pack hnd_v8 lite release
-	pack hnd lite release
 	pack qca full release
 	pack qca lite release
 	pack arm full release

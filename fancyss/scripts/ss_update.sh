@@ -69,18 +69,18 @@ update_ss(){
 		echo "XU6J03M6"
 		exit 1
 	fi
-	run jq --tab . /tmp/version.json.js >/dev/null 2>&1
-	if [ "$?" != "0" ];then
+	if ! fancyss_version_online=$(run jq -er --arg key "version_${PLATFORM}_${PKGTYPE}" \
+		'(.[$key] // .version) | strings | select(test("^[0-9]+(\\.[0-9]+)+$"))' /tmp/version.json.js 2>/dev/null); then
 		echo_date "在线版本号获取错误！请检测你的网络！"
 		echo "XU6J03M6"
-		exit
+		return 1
 	fi
-	
-	fancyss_version_online=$(cat /tmp/version.json.js | run jq -r '.version')
+
+	local_version=${ss_basic_version_local:-0.0.0}
 	echo_date "检测到主服务器在线版本号：${fancyss_version_online}"
 	dbus set ss_basic_version_web="${fancyss_version_online}"
-	if [ "${ss_basic_version_local}" != "${fancyss_version_online}" ];then
-		echo_date "主服务器在线版本号：${fancyss_version_online} 和本地版本号：${ss_basic_version_local} 不同！"
+	if [ "$(versioncmp "${local_version}" "${fancyss_version_online}")" = "1" ]; then
+		echo_date "检测到新版，将从 ${local_version} 升级到 ${fancyss_version_online}。"
 		cd /tmp
 		rm -rf /tmp/${PACKAGE}.tar.gz
 		fancyss_md5_online=$(cat /tmp/version.json.js | run jq -r .$MD5NAME)
@@ -117,7 +117,7 @@ update_ss(){
 			install_fancyss
 		fi
 	else
-		echo_date "主服务器在线版本号：${fancyss_version_online} 和本地版本号：${ss_basic_version_local} 相同！"
+		echo_date "本地版本 ${local_version} 已是最新或高于在线版本。"
 		echo_date "退出插件更新!"
 	fi
 }
